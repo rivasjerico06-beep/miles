@@ -1,0 +1,18 @@
+node_modules
+dist
+.vercel
+.env
+.env.*
+!.env.example
+.pglite
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+
+# Scanner settings with the Wi-Fi password and device key
+firmware/**/secrets.h
+firmware/**/build
+
+# Demo account logins (private)
+demo-accounts.txt

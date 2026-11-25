@@ -1,0 +1,16 @@
+{
+  "name": "CampusPulse · ACNSTHS Class Status & GPS",
+  "short_name": "CampusPulse",
+  "description": "Real-time student class status, daily one-time QR gate pass, parent notifications and trip-home tracking for Antipolo City National Science and Technology High School.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFF5F7",
+  "theme_color": "#EC4899",
+  "categories": ["education", "productivity"],
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+.pglite
+.env
+.env.*
+firmware
+tests
+docs
+*.log
+demo-accounts.txt

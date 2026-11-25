@@ -1,7 +1,7 @@
 import { ClipboardCheck, GraduationCap, HeartPulse, Users } from "lucide-react";
 
 const ROLES = [
-  { icon: GraduationCap, label: "Student", copy: "Daily one-time QR gate pass, trip home and SOS" },
+  { icon: GraduationCap, label: "Student", copy: "QR gate pass that changes every 3 minutes, trip home and SOS" },
   { icon: Users, label: "Parent", copy: "Check-in, dismissal, ETA and arrival alerts" },
   { icon: ClipboardCheck, label: "Teacher", copy: "Real-time class status without location data" },
 ];

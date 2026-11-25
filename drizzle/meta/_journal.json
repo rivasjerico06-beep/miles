@@ -15,6 +15,13 @@
       "when": 1795601160463,
       "tag": "0001_camera_frames",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795649074300,
+      "tag": "0002_pass_code_expiry",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 import { POLL_MS } from "@/lib/campus";
 
 export default function StudentPage() {
-  const { data, isPending, error, refetch } = useQuery({
+  const { data, dataUpdatedAt, isPending, error, refetch } = useQuery({
     queryKey: ["student-dashboard"],
     queryFn: api.studentDashboard,
     refetchInterval: POLL_MS.student,
@@ -26,7 +26,7 @@ export default function StudentPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <section id="gate-pass" className="scroll-mt-20">
-            <QrGatePass data={data} />
+            <QrGatePass data={data} dataUpdatedAt={dataUpdatedAt} onRefresh={refetch} />
           </section>
           <section id="trip" className="scroll-mt-20">
             <TripTracker data={data} onRefresh={refetch} />

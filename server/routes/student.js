@@ -7,7 +7,7 @@ import { requireRole, sha256, studentForUser } from "../auth.js";
 import { getDb } from "../db/client.js";
 import { attendance, sosAlerts, students, users } from "../db/schema.js";
 import { fail, parse, tooManyAttempts } from "../http.js";
-import { getAttendance, getTodayPass, passQrText } from "../services/attendance.js";
+import { getAttendance, getTodayPass, PASS_CODE_MINUTES, passCodeExpiresAt, passQrText } from "../services/attendance.js";
 import { describeSettings, getSettings } from "../services/settings.js";
 import { latestTrip, startTrip, stopTrip, triggerSos, updatePosition } from "../services/trips.js";
 import { alertView, dayView, tripView } from "./views.js";
@@ -50,6 +50,7 @@ router.get("/dashboard", async (req, res) => {
       : Promise.resolve([]),
     getSettings(db),
   ]);
+  const codeExpiresAt = passCodeExpiresAt(pass);
   res.json({
     student: {
       id: student.id,
@@ -68,6 +69,11 @@ router.get("/dashboard", async (req, res) => {
       schoolDate: pass.schoolDate,
       checkedInAt: pass.checkedInAt,
       checkedOutAt: pass.checkedOutAt,
+      // The code changes every few minutes. The app counts down from expiresInMs, not from
+      // codeExpiresAt, because the phone's own clock may be off.
+      codeExpiresAt,
+      expiresInMs: Math.max(0, codeExpiresAt.getTime() - Date.now()),
+      validMinutes: PASS_CODE_MINUTES,
     },
     today: dayView(today),
     trip: tripView(trip),

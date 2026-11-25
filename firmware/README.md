@@ -1,6 +1,6 @@
 # CampusPulse Gate Scanner (ESP32-CAM)
 
-The scanner at the classroom entrance. It reads the student's daily QR gate pass, sends it to
+The scanner at the classroom entrance. It reads the QR code on the student's gate pass, sends it to
 the CampusPulse server over Wi-Fi, and shows the result on the OLED, LEDs and buzzer.
 
 ## Wiring
@@ -36,7 +36,7 @@ will not boot.
 | Check-in after the cut-off | `LATE` + name + time | green | 2 short beeps |
 | Check-out (second scan) | `CHECK-OUT` + name + time | green | 1 longer beep |
 | Same pass again right away | `RECORDED` (nothing new saved) | green | 1 short beep |
-| Wrong, old or used pass | `INVALID QR` / `EXPIRED` / `USED PASS` | red | 1 long beep |
+| Wrong code, code older than 3 minutes, or used pass | `INVALID QR` / `EXPIRED` / `USED PASS` | red | 1 long beep |
 | No Wi-Fi / server down | `NOT SENT` | red | 1 long beep |
 
 Green means the scan was valid, red means it was rejected. The server decides every result and
@@ -75,6 +75,9 @@ the screen goes `WI-FI` → `SERVER` → `SCAN QR` (with the time and `Ready - g
 
 ## Scanning tips
 
+- Each code on the pass works for 3 minutes, and the app shows a new one by itself. A code that is
+  older (for example a screenshot) gets `EXPIRED` and nothing is recorded. This check happens on
+  the server, not in the scanner.
 - Students open **Today's gate pass** in the app (or *Show bigger for scanning*) with the screen
   brightness up, and hold the phone still about 15–20 cm in front of the camera.
 - Mount the scanner so the phone faces the camera straight on, away from direct sunlight.

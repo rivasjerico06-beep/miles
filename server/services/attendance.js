@@ -1,9 +1,10 @@
-// Daily one-time QR passes and the check-in / check-out rules from the study:
-// the server checks that a scanned code exists, belongs to a student, is dated today
-// and has not been used for that entry. The first valid scan is the check-in (late after
-// the cut-off time), the next one is the check-out, and anything after that is rejected.
+// Gate passes and the check-in / check-out rules from the study. Each student has one pass per
+// school day, shown as a QR code that works for only 3 minutes; after that the app gets a new code.
+// The server checks that a scanned code exists, belongs to a student, is from today, is less than
+// 3 minutes old and has not been used for that entry. The first valid scan is the check-in (late
+// after the cut-off time), the next one is the check-out, and anything after that is rejected.
 import { randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { formatManilaTime, manilaClock, minutesFromHHMM } from "../../src/lib/campus.js";
 import { attendance, dailyPasses, scanLogs, students } from "../db/schema.js";
 import { notifyParent } from "./notify.js";
@@ -11,6 +12,11 @@ import { getSettings } from "./settings.js";
 
 export const PASS_PREFIX = "CP1:";
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+// How long one QR code works. The app shows a new code when it runs out, so a screenshot or a
+// code sent to a friend stops working within minutes.
+export const PASS_CODE_MINUTES = 3;
+const PASS_CODE_MS = PASS_CODE_MINUTES * 60 * 1000;
 
 // 12 random bytes -> 20 base32 characters. "CP1:" + 20 characters fits a version-1 QR code
 // (21 x 21 modules), the easiest size for the ESP32-CAM to read from a phone screen.
@@ -41,23 +47,44 @@ export function passQrText(pass) {
   return PASS_PREFIX + pass.token;
 }
 
-export async function getTodayPass(db, studentId, dateKey) {
-  const find = () =>
-    db
+export function passCodeExpiresAt(pass) {
+  return new Date(new Date(pass.tokenIssuedAt).getTime() + PASS_CODE_MS);
+}
+
+export function passCodeExpired(pass, now = new Date()) {
+  return now.getTime() >= passCodeExpiresAt(pass).getTime();
+}
+
+// Today's pass with a code less than 3 minutes old: an expired code is replaced by a new one.
+// The replaced code is kept as previousToken, so scanning it answers EXPIRED, not "not recognized".
+// A pass already used for both entries keeps its last code, since there is nothing left to scan.
+export async function getTodayPass(db, studentId, dateKey, now = new Date()) {
+  const find = async () => {
+    const [row] = await db
       .select()
       .from(dailyPasses)
       .where(and(eq(dailyPasses.studentId, studentId), eq(dailyPasses.schoolDate, dateKey)))
       .limit(1);
-  const [existing] = await find();
-  if (existing) return existing;
-  const [created] = await db
-    .insert(dailyPasses)
-    .values({ studentId, schoolDate: dateKey, token: newPassToken() })
-    .onConflictDoNothing()
-    .returning();
-  if (created) return created;
-  const [again] = await find();
-  return again;
+    return row;
+  };
+  let pass = await find();
+  if (!pass) {
+    const [created] = await db
+      .insert(dailyPasses)
+      .values({ studentId, schoolDate: dateKey, token: newPassToken(), tokenIssuedAt: now })
+      .onConflictDoNothing()
+      .returning();
+    pass = created ?? (await find());
+  }
+  if (pass && passCodeExpired(pass, now) && !(pass.checkedInAt && pass.checkedOutAt)) {
+    const [renewed] = await db
+      .update(dailyPasses)
+      .set({ token: newPassToken(), previousToken: pass.token, tokenIssuedAt: now })
+      .where(and(eq(dailyPasses.id, pass.id), eq(dailyPasses.token, pass.token)))
+      .returning();
+    pass = renewed ?? (await find()); // another request renewed it at the same moment
+  }
+  return pass;
 }
 
 export async function getAttendance(db, studentId, dateKey) {
@@ -148,7 +175,7 @@ export async function verifyScan(db, { text, action = "auto", source, deviceId, 
         .select({ pass: dailyPasses, student: students })
         .from(dailyPasses)
         .innerJoin(students, eq(students.id, dailyPasses.studentId))
-        .where(eq(dailyPasses.token, token))
+        .where(or(eq(dailyPasses.token, token), eq(dailyPasses.previousToken, token)))
         .limit(1);
       if (!row) {
         outcome = rejection(404, "unknown_code", {
@@ -163,6 +190,14 @@ export async function verifyScan(db, { text, action = "auto", source, deviceId, 
           line1: "EXPIRED",
           line2: row.student.fullName,
           line3: "Refresh the app pass",
+          student: row.student,
+        });
+      } else if (row.pass.token !== token || passCodeExpired(row.pass)) {
+        outcome = rejection(410, "code_expired", {
+          message: `This QR code has expired. Each code works for ${PASS_CODE_MINUTES} minutes; scan the new code in the app.`,
+          line1: "EXPIRED",
+          line2: row.student.fullName,
+          line3: "Scan the new code",
           student: row.student,
         });
       } else {

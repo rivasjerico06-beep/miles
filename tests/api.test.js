@@ -87,7 +87,7 @@ test("teacher sign-up needs the access code", async () => {
   assert.equal(settings.data.settings.lateAfter, "23:59");
 });
 
-test("student registers and gets a daily one-time QR pass", async () => {
+test("student registers and gets a QR pass whose code lasts 3 minutes", async () => {
   const bad = await student.post("/api/auth/register", {
     role: "student", fullName: "Juan Dela Cruz", email: "juan@school.test", password: "short",
     studentNumber: "2026-0001", gradeSection: "12 - Leonhard Euler",
@@ -101,9 +101,11 @@ test("student registers and gets a daily one-time QR pass", async () => {
   const dash = await student.get("/api/student/dashboard");
   assert.equal(dash.status, 200);
   assert.match(dash.data.pass.qrText, /^CP1:[A-Z2-7]{20}$/);
+  assert.equal(dash.data.pass.validMinutes, 3);
+  assert.ok(dash.data.pass.expiresInMs > 170000 && dash.data.pass.expiresInMs <= 180000, String(dash.data.pass.expiresInMs));
   assert.equal(dash.data.today, null);
   const again = await student.get("/api/student/dashboard");
-  assert.equal(again.data.pass.qrText, dash.data.pass.qrText, "same pass all day");
+  assert.equal(again.data.pass.qrText, dash.data.pass.qrText, "same code until it expires");
 });
 
 test("parent links only with the student's link code", async () => {
@@ -198,6 +200,38 @@ test("old passes are rejected as expired", async () => {
   const expired = await device({ token: `CP1:${row.token}` });
   assert.equal(expired.status, 410);
   assert.equal(expired.data.reason, "expired");
+});
+
+test("a code older than 3 minutes records nothing, and the app gets a new one", async () => {
+  // José's pass for today was moved to 2020 above, so he gets a fresh, unused pass.
+  const first = (await student2.get("/api/student/dashboard")).data.pass;
+  const token = first.qrText.slice(4);
+  await local.db
+    .update(schema.dailyPasses)
+    .set({ tokenIssuedAt: new Date(Date.now() - 181000) }) // 3 minutes and 1 second ago
+    .where(eq(schema.dailyPasses.token, token));
+
+  const expired = await device({ token: first.qrText });
+  assert.equal(expired.status, 410, JSON.stringify(expired.data));
+  assert.equal(expired.data.reason, "code_expired");
+  assert.equal(expired.data.line1, "EXPIRED");
+  assert.equal(expired.data.line2, "Jose Nino");
+  assert.equal(expired.data.beep, "error");
+  const [unused] = await local.db.select().from(schema.dailyPasses).where(eq(schema.dailyPasses.token, token));
+  assert.equal(unused.checkedInAt, null, "nothing recorded");
+  const backup = await teacher.post("/api/teacher/scan", { text: first.qrText });
+  assert.equal(backup.data.reason, "code_expired", "the teacher's backup scanner follows the same rule");
+
+  const second = (await student2.get("/api/student/dashboard")).data.pass;
+  assert.notEqual(second.qrText, first.qrText, "a new code replaces the expired one");
+  assert.ok(second.expiresInMs > 170000, String(second.expiresInMs));
+  const old = await device({ token: first.qrText });
+  assert.equal(old.status, 410);
+  assert.equal(old.data.reason, "code_expired", "the replaced code still answers EXPIRED");
+
+  const fresh = await device({ token: second.qrText });
+  assert.equal(fresh.status, 200, JSON.stringify(fresh.data));
+  assert.equal(fresh.data.result, "checked_in");
 });
 
 test("trip home: ETA notification, live updates and arrival", async () => {
